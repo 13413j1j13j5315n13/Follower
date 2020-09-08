@@ -18,7 +18,7 @@ namespace Follower
             LeftClickToggleNode = new ToggleNode(true);
             OverrideItemPickup = new ToggleNode(false);
             MouseSpeed = new RangeNode<float>(1, 0, 30);
-            LeaderName = new TextNode();
+            LeaderName = new TextNode("");
         }
 
         public TextNode LeaderName { get; set; }
