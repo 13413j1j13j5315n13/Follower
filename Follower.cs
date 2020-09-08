@@ -39,10 +39,12 @@ namespace Follower
 
         public override bool Initialise()
         {
+            DebugWindow.LogMsg($"Initialise called");
+
             _followerCoroutine = new Coroutine(MainWorkCoroutine(), this, "Follower");
             Core.ParallelRunner.Run(_followerCoroutine);
-            _followerCoroutine.Pause();
-            _debugTimer.Reset();
+            //_followerCoroutine.Pause();
+            //_debugTimer.Reset();
             Settings.MouseSpeed.OnValueChanged += (sender, f) => { Mouse.speedMouse = Settings.MouseSpeed.Value; };
             _workCoroutine = new WaitTime(Settings.ExtraDelay);
             Settings.ExtraDelay.OnValueChanged += (sender, i) => _workCoroutine = new WaitTime(i);
@@ -51,6 +53,7 @@ namespace Follower
 
         private IEnumerator MainWorkCoroutine()
         {
+            DebugWindow.LogMsg($"Starting Follower");
             while (true)
             {
                 //yield return FindItemToPick();
@@ -62,51 +65,12 @@ namespace Follower
             }
         }
 
-
-        public override Job Tick()
-        {
-            if (Input.GetKeyState(Keys.Escape)) _followerCoroutine.Pause();
-
-            if (Input.GetKeyState(Settings.PickUpKey.Value))
-            {
-                _debugTimer.Restart();
-
-                if (_followerCoroutine.IsDone)
-                {
-                    var firstOrDefault = Core.ParallelRunner.Coroutines.FirstOrDefault(x => x.OwnerName == nameof(Follower));
-
-                    if (firstOrDefault != null)
-                        _followerCoroutine = firstOrDefault;
-                }
-
-                _followerCoroutine.Resume();
-                _fullWork = false;
-            }
-            else
-            {
-                if (_fullWork)
-                {
-                    _followerCoroutine.Pause();
-                    _debugTimer.Reset();
-                }
-            }
-
-            if (_debugTimer.ElapsedMilliseconds > 2000)
-            {
-                _fullWork = true;
-                LogMessage("Error pick it stop after time limit 2000 ms", 1);
-                _debugTimer.Reset();
-            }
-
-            return null;
-        }
-
         private IEnumerable FollowPlayer()
         {
             if (Settings.LeaderName.Value == "")
                 yield break;
 
-            IEnumerable<Entity> players  = GameController.Entities.Where(x => x.Type == EntityType.Player);
+            IEnumerable<Entity> players = GameController.Entities.Where(x => x.Type == EntityType.Player);
             Entity leaderPlayer = SelectLeaderPlayer(players);
 
             if (leaderPlayer == null)
@@ -142,6 +106,44 @@ namespace Follower
         }
 
 
+        //public override Job Tick()
+        //{
+        //    if (Input.GetKeyState(Keys.Escape)) _followerCoroutine.Pause();
+
+        //    if (Input.GetKeyState(Settings.PickUpKey.Value))
+        //    {
+        //        _debugTimer.Restart();
+
+        //        if (_followerCoroutine.IsDone)
+        //        {
+        //            var firstOrDefault = Core.ParallelRunner.Coroutines.FirstOrDefault(x => x.OwnerName == nameof(Follower));
+
+        //            if (firstOrDefault != null)
+        //                _followerCoroutine = firstOrDefault;
+        //        }
+
+        //        _followerCoroutine.Resume();
+        //        _fullWork = false;
+        //    }
+        //    else
+        //    {
+        //        if (_fullWork)
+        //        {
+        //            _followerCoroutine.Pause();
+        //            _debugTimer.Reset();
+        //        }
+        //    }
+
+        //    if (_debugTimer.ElapsedMilliseconds > 2000)
+        //    {
+        //        _fullWork = true;
+        //        LogMessage("Error pick it stop after time limit 2000 ms", 1);
+        //        _debugTimer.Reset();
+        //    }
+
+        //    return null;
+        //}
+
 
 
 
@@ -149,7 +151,7 @@ namespace Follower
              *    OLD CODE FROM HERE TO BE DELETED
              */
 
-            public bool DoWePickThis(CustomItem itemEntity)
+        public bool DoWePickThis(CustomItem itemEntity)
         {
             if (!itemEntity.IsValid)
                 return false;
