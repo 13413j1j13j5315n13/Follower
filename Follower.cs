@@ -15,7 +15,9 @@ using System.IO;
 using System.Linq;
 using System.Reflection;
 using System.Windows.Forms;
+using Newtonsoft.Json;
 using Input = ExileCore.Input;
+using NumericsVector2 = System.Numerics.Vector2;
 
 namespace Follower
 {
@@ -26,27 +28,41 @@ namespace Follower
         private WaitTime _workCoroutine;
         private uint _coroutineCounter;
         private bool _fullWork = true;
+        private bool _followerIsWorking = false;
         private Coroutine _followerCoroutine;
+        private Coroutine _networkActivityCoroutine;
+
+        private RectangleF _windowRectangle;
+        private Size2F _windowSize;
+
+        private FollowerType _currentFollowerMode = FollowerType.Disabled;
 
         private WaitTime Wait3ms => new WaitTime(3);
 
         private WaitTime Wait10ms => new WaitTime(10);
 
-        private Random _rand;
         private DateTime _currentTime = DateTime.UtcNow;
-        private DateTime _lastTimeCastFlameDash;
+        private DateTime _lastTimeMovementSkillUsed;
 
         public override bool Initialise()
         {
             LogMessage("****** Initialise started", 1);
 
-            _rand = new Random();
-            _lastTimeCastFlameDash = DateTime.UtcNow;
+            _windowRectangle = GameController.Window.GetWindowRectangleReal();
+            _windowSize = new Size2F(_windowRectangle.Width / 2560, _windowRectangle.Height / 1600);
+            _lastTimeMovementSkillUsed = DateTime.UtcNow;
+
+            GameController.LeftPanel.WantUse(() => true);
 
             _followerCoroutine = new Coroutine(MainWorkCoroutine(), this, "Follower");
+            _networkActivityCoroutine = new Coroutine(MainNetworkActivityCoroutine(), this, "Follower Network Activity");
+
             Core.ParallelRunner.Run(_followerCoroutine);
+            Core.ParallelRunner.Run(_networkActivityCoroutine);
 
             _followerCoroutine.Pause();
+            _networkActivityCoroutine.Pause();
+
             _debugTimer.Reset();
 
             Settings.MouseSpeed.OnValueChanged += (sender, f) => { Mouse.speedMouse = Settings.MouseSpeed.Value; };
@@ -54,6 +70,65 @@ namespace Follower
             Settings.ExtraDelay.OnValueChanged += (sender, i) => _workCoroutine = new WaitTime(i);
 
             return true;
+        }
+
+        public override void Render()
+        {
+            //LogMessage("****** Render called", 1);
+
+            int fontHeight = 40;
+
+            var startDrawPoint = GameController.LeftPanel.StartDrawPoint;
+
+            var (workingText, workingColor) = GetWorkingTextAndColor();
+            NumericsVector2 firstLine = Graphics.DrawText(workingText, startDrawPoint, workingColor, fontHeight, FontAlign.Right);
+            startDrawPoint.Y += firstLine.Y;
+
+            if (Settings.EnableNetworkActivity.Value)
+            {
+                var (text, color) = GetFollowerModeTextAndColor();
+                NumericsVector2 lastLine = Graphics.DrawText(text, startDrawPoint, color, fontHeight, FontAlign.Right);
+
+                startDrawPoint.Y += lastLine.Y;
+            }
+        }
+
+        private (string, Color) GetWorkingTextAndColor()
+        {
+            if (_followerIsWorking)
+            {
+                return ("Following is working", Color.Red);
+            }
+            return ("Following disabled", Color.Yellow);
+        }
+
+        private (string, Color) GetFollowerModeTextAndColor()
+        {
+            string prefix = "Follower Mode: ";
+            string text = prefix + "Disabled";
+            Color color = Color.Yellow;
+
+            if (_currentFollowerMode == FollowerType.Follower)
+            {
+                text = prefix + "Follower";
+                color = Settings.FollowerTextColor.Value;
+            } else if (_currentFollowerMode == FollowerType.Leader)
+            {
+                text = prefix + "Leader";
+                color = Settings.LeaderTextColor.Value;
+            }
+
+            return (text, color);
+        }
+
+        private IEnumerator MainNetworkActivityCoroutine()
+        {
+            LogMessage("****** MainNetworkActivityCoroutine started", 1);
+            while (true)
+            {
+                LogMessage("****** Inside MainNetworkActivityCoroutine while true", 1);
+                yield return DoNetworkActivityWork();
+            }
         }
 
         private IEnumerator MainWorkCoroutine()
@@ -72,13 +147,25 @@ namespace Follower
 
         public override Job Tick()
         {
+            SetFollowerModeValues();
             _currentTime = DateTime.UtcNow;
 
-            if (Input.GetKeyState(Keys.Escape)) _followerCoroutine.Pause();
+            if (Input.GetKeyState(Keys.Escape))
+            {
+                _followerIsWorking = false;
+                _followerCoroutine.Pause();
+                _networkActivityCoroutine.Pause();
+            };
+
+            if (Input.GetKeyState(Settings.NetworkActivityActivateKey.Value))
+            {
+                _networkActivityCoroutine.Resume();
+            }
 
             if (Input.GetKeyState(Settings.FollowerActivateKey.Value))
             {
                 _debugTimer.Restart();
+                _followerIsWorking = true;
 
                 if (_followerCoroutine.IsDone)
                 {
@@ -93,25 +180,38 @@ namespace Follower
                 _followerCoroutine.Resume();
                 _fullWork = false;
             }
-            else
-            {
-                if (_fullWork)
-                {
-                    _followerCoroutine.Pause();
-                    _debugTimer.Reset();
-                }
-            }
-
-            int errorElapsedSeconds = 1000 * 30;
-
-            if (_debugTimer.ElapsedMilliseconds > errorElapsedSeconds)
-            {
-                _fullWork = true;
-                LogMessage("errorElapsedSeconds has been elapsed. Turning off ", 1);
-                _debugTimer.Reset();
-            }
+            //else
+            //{
+            //    if (_fullWork)
+            //    {
+            //        _followerCoroutine.Pause();
+            //        _debugTimer.Reset();
+            //    }
+            //}
 
             return null;
+        }
+
+        private void SetFollowerModeValues()
+        {
+            if (Settings.FollowerModeToggleFollower.Value)
+            {
+                _currentFollowerMode = FollowerType.Follower;
+            }
+            else if (Settings.FollowerModeToggleLeader.Value)
+            {
+                _currentFollowerMode = FollowerType.Leader;
+            }
+            else
+            {
+                _currentFollowerMode = FollowerType.Disabled;
+            }
+        }
+
+        private IEnumerator DoNetworkActivityWork()
+        {
+            LogMessage(" :::::::: DoNetworkActivityWork called", 1);
+            yield break;
         }
 
         private IEnumerator DoWork()
@@ -154,11 +254,8 @@ namespace Follower
             Camera camera = GameController.Game.IngameState.Camera;
             var result = camera.WorldToScreen(worldCoords);
 
-            var windowRectangle = GameController.Window.GetWindowRectangleReal();
-            var windowSize = new Size2F(windowRectangle.Width / 2560, windowRectangle.Height / 1600);
-
-            float scaledWidth = 50 * windowSize.Width;
-            float scaledHeight = 10 * windowSize.Height;
+            float scaledWidth = 50 * _windowSize.Width;
+            float scaledHeight = 10 * _windowSize.Height;
 
             RectangleF aaa = new RectangleF(result.X - scaledWidth / 2f, result.Y - scaledHeight / 2f, scaledWidth,
                 scaledHeight);
@@ -167,47 +264,20 @@ namespace Follower
 
             //LogMessage("Moving and clicking mouse.", 5, Color.Red);
 
-            if (CanCastFlameDash())
-            {
-                LogMessage("Casting flame dash", 1);
-                yield return CastFlameDash(finalPos);
-            }
-            else
-            {
-                LogMessage("Clicking on the leader", 1);
-                yield return ClickOnLeader(finalPos);
-            }
+            Mouse.MoveCursorToPosition(finalPos);
+            yield return Wait3ms;
+            Mouse.MoveCursorToPosition(finalPos);
+            yield return Wait10ms;
+            yield return CanUseMovementSkill() ? Input.KeyPress(Settings.MovementSkillKey) : Mouse.LeftClick();
         }
 
-        private bool CanCastFlameDash()
+        private bool CanUseMovementSkill()
         {
             var currentMs = ((DateTimeOffset) _currentTime).ToUnixTimeMilliseconds();
-            var lastTimeMs = ((DateTimeOffset) _lastTimeCastFlameDash).ToUnixTimeMilliseconds();
+            var lastTimeMs = ((DateTimeOffset) _lastTimeMovementSkillUsed).ToUnixTimeMilliseconds();
             var delta = currentMs - lastTimeMs;
 
-            return Settings.FlameDash && delta > Settings.FlameDashCooldownMilliseconds.Value;
-        }
-
-        private IEnumerator CastFlameDash(Vector2 pos)
-        {
-            Mouse.MoveCursorToPosition(pos);
-            yield return Wait3ms;
-            Mouse.MoveCursorToPosition(pos);
-            yield return Wait10ms;
-            yield return Input.KeyPress(Settings.FlameDashKey);
-
-            _lastTimeCastFlameDash = _currentTime;
-
-            yield break;
-        }
-
-        private IEnumerator ClickOnLeader(Vector2 pos)
-        {
-            Mouse.MoveCursorToPosition(pos);
-            yield return Wait3ms;
-            Mouse.MoveCursorToPosition(pos);
-            yield return Wait10ms;
-            yield return Mouse.LeftClick();
+            return Settings.UseMovementSkill && delta > Settings.MovementSkillCooldownMilliseconds.Value;
         }
     }
 }
