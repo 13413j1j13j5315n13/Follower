@@ -32,7 +32,9 @@ namespace Follower
         HttpListener _httpListener = new HttpListener();
 
         private WaitTime _workCoroutine;
+
         private uint _coroutineCounter;
+
         //private bool _fullWork = true;
         private bool _followerShouldWork = false;
         private bool _networkCoroutineShouldWork = false;
@@ -40,6 +42,7 @@ namespace Follower
         private Coroutine _followerCoroutine;
         private Coroutine _networkActivityCoroutine;
         private Coroutine _serverCoroutine;
+
         private bool _networkRequestFinished = true;
         //private bool _coroutinesFirstTime = true;
 
@@ -50,7 +53,7 @@ namespace Follower
         private NetworkHelper _networkHelper;
 
         private FollowerType _currentFollowerMode = FollowerType.Disabled;
-
+        private FollowerAggressiveness _followerAggressivenessMode = FollowerAggressiveness.Disabled;
         private WaitTime Wait3ms => new WaitTime(3);
 
         private WaitTime Wait10ms => new WaitTime(10);
@@ -59,6 +62,7 @@ namespace Follower
         private DateTime _currentTime = DateTime.UtcNow;
         private DateTime _lastTimeMovementSkillUsed;
         private DateTime _lastTimeNetworkActivityPropagateWorkingChanged;
+        private DateTime _lastTimeAggressivenessModePropagated;
 
         public override bool Initialise()
         {
@@ -70,12 +74,14 @@ namespace Follower
             _windowSize = new Size2F(_windowRectangle.Width / 2560, _windowRectangle.Height / 1600);
             _lastTimeMovementSkillUsed = DateTime.UtcNow;
             _lastTimeNetworkActivityPropagateWorkingChanged = DateTime.UtcNow;
+            _lastTimeAggressivenessModePropagated = DateTime.UtcNow;
 
             GameController.LeftPanel.WantUse(() => true);
 
             _serverCoroutine = new Coroutine(MainServerCoroutine(), this, "Follower Server");
-            _followerCoroutine = new Coroutine(MainWorkCoroutine(), this, "Follower");
-            _networkActivityCoroutine = new Coroutine(MainNetworkActivityCoroutine(), this, "Follower Network Activity");
+            _followerCoroutine = new Coroutine(MainFollowerCoroutine(), this, "Follower");
+            _networkActivityCoroutine =
+                new Coroutine(MainNetworkActivityCoroutine(), this, "Follower Network Activity");
 
             Core.ParallelRunner.Run(_serverCoroutine);
             Core.ParallelRunner.Run(_followerCoroutine);
@@ -109,12 +115,14 @@ namespace Follower
             var startDrawPoint = GameController.LeftPanel.StartDrawPoint;
 
             var (workingText, workingColor) = GetWorkingTextAndColor();
-            NumericsVector2 firstLine = Graphics.DrawText(workingText, startDrawPoint, workingColor, fontHeight, FontAlign.Right);
+            NumericsVector2 firstLine =
+                Graphics.DrawText(workingText, startDrawPoint, workingColor, fontHeight, FontAlign.Right);
             startDrawPoint.Y += firstLine.Y;
 
             if (Settings.EnableNetworkActivity.Value)
             {
-                NumericsVector2 line = Graphics.DrawText("Network Activity is enabled", startDrawPoint, Color.Yellow, fontHeight, FontAlign.Right);
+                NumericsVector2 line = Graphics.DrawText("Network Activity is enabled", startDrawPoint, Color.Yellow,
+                    fontHeight, FontAlign.Right);
                 startDrawPoint.Y += line.Y;
 
                 string naText = "Network coroutine is" + (_networkActivityCoroutine.Running ? "" : " NOT") + " running";
@@ -124,7 +132,8 @@ namespace Follower
 
                 if (_httpListener.IsListening)
                 {
-                    line = Graphics.DrawText("Server is listening", startDrawPoint, Color.Yellow, fontHeight, FontAlign.Right);
+                    line = Graphics.DrawText("Server is listening", startDrawPoint, Color.Yellow, fontHeight,
+                        FontAlign.Right);
                     startDrawPoint.Y += line.Y;
                 }
 
@@ -133,6 +142,14 @@ namespace Follower
                 startDrawPoint.Y += line.Y;
 
                 (text, color) = GetPropagateWorkingText();
+                line = Graphics.DrawText(text, startDrawPoint, color, fontHeight, FontAlign.Right);
+                startDrawPoint.Y += line.Y;
+
+                (text, color) = GetPropagatedFollowersAggressivenessModeText();
+                line = Graphics.DrawText(text, startDrawPoint, color, fontHeight, FontAlign.Right);
+                startDrawPoint.Y += line.Y;
+
+                (text, color) = GetFollowerAggressivenessModeText();
                 line = Graphics.DrawText(text, startDrawPoint, color, fontHeight, FontAlign.Right);
                 startDrawPoint.Y += line.Y;
             }
@@ -144,6 +161,7 @@ namespace Follower
             {
                 return ("Following is working", Color.Red);
             }
+
             return ("Following disabled", Color.Yellow);
         }
 
@@ -154,7 +172,38 @@ namespace Follower
             {
                 return (prefix + "True", Color.Red);
             }
+
             return (prefix + "False", Color.Yellow);
+        }
+
+        private (string, Color) GetPropagatedFollowersAggressivenessModeText()
+        {
+            string prefix = "Propagating slaves aggressiveness: ";
+            if (Settings.PropagateFollowerAggressiveness == FollowerAggressiveness.Aggressive)
+            {
+                return (prefix + "Aggressive", Color.Red);
+            }
+            else if (Settings.PropagateFollowerAggressiveness == FollowerAggressiveness.Passive)
+            {
+                return (prefix + "Passive", Color.Green);
+            }
+
+            return (prefix + "Disabled", Color.White);
+        }
+
+        private (string, Color) GetFollowerAggressivenessModeText()
+        {
+            string prefix = "Follower aggressiveness: ";
+            if (_followerAggressivenessMode == FollowerAggressiveness.Aggressive)
+            {
+                return (prefix + "Aggressive", Color.Red);
+            }
+            else if (_followerAggressivenessMode == FollowerAggressiveness.Passive)
+            {
+                return (prefix + "Passive", Color.Green);
+            }
+
+            return (prefix + "Disabled", Color.White);
         }
 
         private (string, Color) GetFollowerModeTextAndColor()
@@ -190,27 +239,18 @@ namespace Follower
 
                 if (_currentFollowerMode == FollowerType.Follower)
                 {
-                    //LogMessage("****** MainNetworkActivityCoroutine inside FollowerType.Follower", 1);
                     _httpListener.Stop();
                     yield return DoFollowerNetworkActivityWork();
-                    yield return new WaitTime(3 * 1000); ; // Always wait before making a new request
+                    yield return new WaitTime(3 * 1000);
+                    ; // Always wait before making a new request
                 }
                 else if (_currentFollowerMode == FollowerType.Leader)
                 {
-                    //LogMessage("****** MainNetworkActivityCoroutine inside FollowerType.Leader", 1);
-                    //LogMessage($"****** _httpListener.IsListening {_httpListener.IsListening}", 1);
                     if (!_httpListener.IsListening)
                     {
                         _httpListener.Start();
                     }
                 }
-                //else
-                //{
-                //    LogMessage("****** MainNetworkActivityCoroutine inside else", 1);
-                //    _httpListener.Stop();
-                //}
-
-                //LogMessage("****** MainNetworkActivityCoroutine after everything", 1);
 
                 yield return Wait10ms;
             }
@@ -233,58 +273,28 @@ namespace Follower
                     //LogMessage(" :::::::: Before GetContext", 1);
 
                     _networkHelper.MakeAsyncListen(_httpListener);
-
-                    //IAsyncResult result = _httpListener.BeginGetContext(new AsyncCallback(ListenerCallback), _httpListener);
-
-                    //void ListenerCallback(IAsyncResult res)
-                    //{
-                    //    HttpListener list = (HttpListener)res.AsyncState;
-
-                    //    HttpListenerContext context;
-                    //    try
-                    //    {
-                    //        context = list.EndGetContext(res);
-                    //    }
-                    //    catch (Exception e)
-                    //    {
-                    //        // Probably listener was closed so everything is OK
-                    //        return;
-                    //    }
-
-                    //    HttpListenerRequest req = context.Request;
-                    //    // Obtain a response object.
-                    //    HttpListenerResponse response = context.Response;
-                    //    // Construct a response.
-                    //    NetworkActivityObject networkActivityObject = new NetworkActivityObject(
-                    //        Settings.NetworkActivityPropagateWorking.Value,
-                    //        FollowerType.Follower,
-                    //        Settings.NetworkActivityPropagateLeaderName.Value,
-                    //        Settings.NetworkActivityPropagateUseMovementSkill.Value,
-                    //        Settings.NetworkActivityPropagateMovementSkillKey.Value
-                    //    );
-                    //    // Construct a response.
-                    //    string responseString = JsonConvert.SerializeObject(networkActivityObject); ;
-                    //    byte[] buffer = System.Text.Encoding.UTF8.GetBytes(responseString);
-                    //    // Get a response stream and write the response to it.
-                    //    response.ContentLength64 = buffer.Length;
-                    //    System.IO.Stream output = response.OutputStream;
-                    //    output.Write(buffer, 0, buffer.Length);
-                    //    // You must close the output stream.
-                    //    output.Close();
-                    //}
                 }
 
                 yield return new WaitTime(50);
             }
         }
 
-        private IEnumerator MainWorkCoroutine()
+        private IEnumerator MainFollowerCoroutine()
         {
-            LogMessage("****** MainWorkCoroutine started", 1);
+            LogMessage("****** MainFollowerCoroutine started", 1);
             while (true)
             {
                 if (_followerShouldWork)
-                    yield return DoWork();
+                {
+                    if (_followerAggressivenessMode == FollowerAggressiveness.Passive)
+                    {
+                        yield return DoFollow();
+                    }
+                    else if (_followerAggressivenessMode == FollowerAggressiveness.Aggressive)
+                    {
+                        yield return DoAttack();
+                    }
+                }
 
                 _coroutineCounter++;
                 _followerCoroutine.UpdateTicks(_coroutineCounter);
@@ -298,13 +308,6 @@ namespace Follower
             SetFollowerModeValues();
             _currentTime = DateTime.UtcNow;
 
-            //if (_coroutinesFirstTime)
-            //{
-            //    _followerCoroutine.Pause();
-            //    _networkActivityCoroutine.Pause();
-            //    _coroutinesFirstTime = false;
-            //}
-
             if (Input.GetKeyState(Keys.Escape))
             {
                 _followerCoroutine.Pause();
@@ -316,11 +319,18 @@ namespace Follower
                     LogMessage($"****** Tick: stopping the listener ", 1);
                     _httpListener.Stop();
                 }
-            };
+            }
+
+            ;
 
             if (Input.GetKeyState(Settings.NetworkActivityPropagateWorkingChangeKey.Value))
             {
                 ChangeNetworkActivityPropagateWorking();
+            }
+
+            if (Input.GetKeyState(Settings.NetworkActivityPropagateAggressivenessModeChangeKey.Value))
+            {
+                ChangeAggressivenessModeToPropagate();
             }
 
             if (Input.GetKeyState(Settings.NetworkActivityActivateKey.Value))
@@ -334,7 +344,9 @@ namespace Follower
             {
                 if (_networkActivityCoroutine.Running)
                 {
-                    LogMessage($"****** You tried to start the follower activity when network activity is running. Stop network activity first", 1);
+                    LogMessage(
+                        $"****** You tried to start the follower activity when network activity is running. Stop network activity first",
+                        1);
                     LogMessage($"****** Skipping starting the follower activity ", 1);
                     return null;
                 }
@@ -400,8 +412,6 @@ namespace Follower
 
         private void ProcessNetworkActivityResponse(NetworkActivityObject activityObj)
         {
-            //LogMessage(" :::::::: ProcessNetworkActivityResponse called", 1);
-            //LogMessage($" :::::::: activityObj {activityObj}", 1);
             if (activityObj == null)
             {
                 return;
@@ -410,53 +420,152 @@ namespace Follower
             Settings.LeaderName.Value = activityObj.LeaderName;
             Settings.UseMovementSkill.Value = activityObj.UseMovementSkill;
             _currentFollowerMode = activityObj.FollowerMode;
+            _followerAggressivenessMode = activityObj.PropagateFollowerAggressiveness;
             _followerShouldWork = activityObj.Working;
 
-            if (activityObj.Working)
+            if (activityObj.Working) _followerCoroutine.Resume();
+            else _followerCoroutine.Pause();
+
+            if (activityObj.FollowerSkills != null && activityObj.FollowerSkills.Any())
             {
-                LogMessage(" :::::::: Resuming follower coroutine because activityObj.Working was true", 1);
-                _followerCoroutine.Resume();
-            }
-            else
-            {
-                _followerCoroutine.Pause();
+                List<SkillSettings> settingsSkills = new List<SkillSettings>()
+                {
+                    Settings.SkillOne,
+                    Settings.SkillTwo,
+                    Settings.SkillThree
+                };
+                foreach (FollowerSkill skill in activityObj.FollowerSkills.OrderBy(o => o.Position))
+                {
+                    SkillSettings settingsSkill = settingsSkills[skill.Position - 1];
+
+                    settingsSkill.Enable.Value = skill.Enable;
+                    settingsSkill.SkillHotkey.Value = skill.Hotkey;
+                    settingsSkill.UseAgainstMonsters.Value = skill.UseAgainstMonsters;
+                    settingsSkill.CooldownBetweenCasts.Value = skill.Cooldown.ToString();
+                    settingsSkill.Priority.Value = skill.Priority;
+                    settingsSkill.Position.Value = skill.Position;
+                    settingsSkill.Range.Value = skill.Range;
+                }
             }
 
             return;
         }
 
-        private IEnumerator DoWork()
+        private IEnumerator DoAttack()
         {
-            //LogMessage(" :::::::: DoWork called", 1);
+            LogMessage(" ------ DoAttack called", 1);
 
-            if (Settings.LeaderName == null || Settings.LeaderName.Value == "")
+            List<Entity> monsters = GameController.EntityListWrapper
+                .ValidEntitiesByType[EntityType.Monster]
+                .Where(o => o.IsAlive)
+                .Where(o => o.IsHostile)
+                .ToList();
+
+            Entity leaderPlayer = FollowerHelpers.GetLeaderEntity(Settings.LeaderName, GameController.Entities);
+            Entity player = leaderPlayer ?? GameController.Player;
+
+            IEnumerator nextStep = null;
+            
+            try
             {
-                yield break;
+                if (monsters.Any())
+                {
+                    List<Entity> closestMonsters = monsters.OrderBy(o => FollowerHelpers.EntityDistance(o, player)).ToList();
+                    Entity closestMonster = closestMonsters.First();
+                    nextStep = AttackEntity(closestMonster);
+                }
+                else nextStep = DoFollow();
+            }
+            catch (ArgumentNullException e)
+            {
+                nextStep = DoFollow();
             }
 
-            IEnumerable<Entity> players = GameController.Entities.Where(x => x.Type == EntityType.Player);
-
-            string leaderName = Settings.LeaderName.Value;
-            Entity leaderPlayer = SelectLeaderPlayer(players, leaderName);
-
-            if (leaderPlayer == null)
-            {
-                yield break;
-            }
-
-            yield return TryToClickOnLeader(leaderPlayer);
+            yield return nextStep;
         }
 
-        private Entity SelectLeaderPlayer(IEnumerable<Entity> players, string leaderName)
+        private IEnumerator AttackEntity(Entity closestMonster)
         {
-            return players.First(x => x.GetComponent<Player>().PlayerName == leaderName);
+            LogMessage(" ------ AttackEntity called", 1);
+
+            List<SkillSettings> skills = new List<SkillSettings>()
+            {
+                Settings.SkillOne,
+                Settings.SkillTwo,
+                Settings.SkillThree,
+            };
+
+            SkillSettings availableSkill = null;
+            try
+            {
+                availableSkill = skills
+                    .Where(o =>
+                    {
+                        long delta = GetDeltaInMilliseconds(o.LastTimeUsed);
+                        return delta > Int32.Parse(o.CooldownBetweenCasts.Value);
+                    })
+                    .Where(o =>
+                    {
+                        var distance = FollowerHelpers.EntityDistance(closestMonster, GameController.Player) / 10;
+                        LogMessage($"DISTANCE: {distance}");
+                        LogMessage($"o.Range.Value: {o.Range.Value}");
+                        return distance < o.Range.Value;
+                    })
+                    .OrderBy(o => o.Priority.Value)
+                    .First();
+
+                availableSkill.LastTimeUsed = DateTime.UtcNow;
+            }
+            catch (Exception e)
+            {
+                LogError(" ------ Error during filtering an available skill");
+            }
+
+            if (availableSkill != null)
+            {
+                yield return HoverTo(closestMonster);
+                Input.KeyPressRelease(availableSkill.SkillHotkey.Value);
+            }
+            else
+            {
+                yield return DoFollow();
+            }
+
+            yield break;
+        }
+
+        private IEnumerator DoFollow()
+        {
+            LogMessage(" :::::::: DoFollow called", 1);
+
+            Entity leaderPlayer = FollowerHelpers.GetLeaderEntity(Settings.LeaderName, GameController.Entities);
+            if (leaderPlayer == null) yield break;
+
+            yield return TryToClickOnLeader(leaderPlayer);
         }
 
         private IEnumerator TryToClickOnLeader(Entity leaderPlayer)
         {
             //LogMessage(" ;;;;;;;;; TryToClickOnLeader called", 1);
 
-            var worldCoords = leaderPlayer.Pos;
+            yield return HoverTo(leaderPlayer);
+
+            if (CanUseMovementSkill())
+            {
+                _lastTimeMovementSkillUsed = DateTime.UtcNow;
+                yield return Input.KeyPress(Settings.MovementSkillKey);
+            }
+            else
+            {
+                yield return Mouse.LeftClick();
+            }
+
+            yield return CanUseMovementSkill() ? Input.KeyPress(Settings.MovementSkillKey) : Mouse.LeftClick();
+        }
+
+        private IEnumerator HoverTo(Entity entity)
+        {
+            var worldCoords = entity.Pos;
             Camera camera = GameController.Game.IngameState.Camera;
             var result = camera.WorldToScreen(worldCoords);
 
@@ -474,23 +583,11 @@ namespace Follower
             yield return Wait3ms;
             Mouse.MoveCursorToPosition(finalPos);
             yield return Wait10ms;
-            if (CanUseMovementSkill())
-            {
-                _lastTimeMovementSkillUsed = DateTime.UtcNow;
-                yield return Input.KeyPress(Settings.MovementSkillKey);
-            }
-            else
-            {
-                yield return Mouse.LeftClick();
-            }
-            yield return CanUseMovementSkill() ? Input.KeyPress(Settings.MovementSkillKey) : Mouse.LeftClick();
         }
 
         private bool CanUseMovementSkill()
         {
-            var currentMs = ((DateTimeOffset)_currentTime).ToUnixTimeMilliseconds();
-            var lastTimeMs = ((DateTimeOffset)_lastTimeMovementSkillUsed).ToUnixTimeMilliseconds();
-            var deltaMilliseconds = currentMs - lastTimeMs;
+            var deltaMilliseconds = GetDeltaInMilliseconds(_lastTimeMovementSkillUsed);
 
             return Settings.UseMovementSkill && deltaMilliseconds > Settings.MovementSkillCooldownMilliseconds.Value;
         }
@@ -498,9 +595,8 @@ namespace Follower
         private void ChangeNetworkActivityPropagateWorking()
         {
             int timeoutMilliseconds = 2000;
-            var currentMs = ((DateTimeOffset)_currentTime).ToUnixTimeMilliseconds();
-            var lastTimeMs = ((DateTimeOffset)_lastTimeNetworkActivityPropagateWorkingChanged).ToUnixTimeMilliseconds();
-            var deltaMilliseconds = currentMs - lastTimeMs;
+            var deltaMilliseconds = GetDeltaInMilliseconds(_lastTimeNetworkActivityPropagateWorkingChanged);
+
             var value = Settings.NetworkActivityPropagateWorking.Value;
 
             if (deltaMilliseconds > timeoutMilliseconds)
@@ -508,6 +604,31 @@ namespace Follower
                 _lastTimeNetworkActivityPropagateWorkingChanged = DateTime.UtcNow;
                 Settings.NetworkActivityPropagateWorking.Value = !value;
             }
+        }
+
+        private void ChangeAggressivenessModeToPropagate()
+        {
+            int timeoutMilliseconds = 1000;
+            long deltaMilliseconds = GetDeltaInMilliseconds(_lastTimeAggressivenessModePropagated);
+
+            if (deltaMilliseconds > timeoutMilliseconds)
+            {
+                _lastTimeAggressivenessModePropagated = DateTime.UtcNow;
+
+                if (Settings.PropagateFollowerAggressiveness == FollowerAggressiveness.Passive)
+                    Settings.PropagateFollowerAggressiveness = FollowerAggressiveness.Aggressive;
+                else if (Settings.PropagateFollowerAggressiveness == FollowerAggressiveness.Aggressive)
+                    Settings.PropagateFollowerAggressiveness = FollowerAggressiveness.Passive;
+                else
+                    Settings.PropagateFollowerAggressiveness = FollowerAggressiveness.Passive;
+            }
+        }
+
+        private long GetDeltaInMilliseconds(DateTime lastTime)
+        {
+            long currentMs = ((DateTimeOffset) _currentTime).ToUnixTimeMilliseconds();
+            long lastTimeMs = ((DateTimeOffset) lastTime).ToUnixTimeMilliseconds();
+            return currentMs - lastTimeMs;
         }
     }
 }

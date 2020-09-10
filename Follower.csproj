@@ -86,8 +86,10 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CustomItem.cs" />
+    <Compile Include="FollowerSkill.cs" />
+    <Compile Include="FollowerHelpers.cs" />
+    <Compile Include="Enums.cs" />
     <Compile Include="NetworkActivity.cs" />
-    <Compile Include="Misc.cs" />
     <Compile Include="Mouse.cs" />
     <Compile Include="Follower.cs" />
     <Compile Include="FollowerSettings.cs" />

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Drawing.Text;
 using System.IO;
 using ExileCore.PoEMemory.Components;
 using ExileCore.PoEMemory.MemoryObjects;
@@ -12,47 +14,55 @@ namespace Follower
 {
     public class NetworkActivityObject
     {
-        public NetworkActivityObject(bool working, FollowerType followerType, string leaderName, bool useMovementSkill, Keys movementSkillKey)
+        public NetworkActivityObject(bool working, FollowerType followerType, string leaderName, bool useMovementSkill,
+            Keys movementSkillKey, List<FollowerSkill> followerSkills,
+            FollowerAggressiveness propagateFollowerAggressiveness)
         {
             Working = working;
             FollowerMode = followerType;
             LeaderName = leaderName;
             UseMovementSkill = useMovementSkill;
             MovementSkillKey = movementSkillKey;
+            LastChangeTimestamp = ((DateTimeOffset) DateTime.UtcNow).ToUnixTimeMilliseconds();
+            FollowerSkills = followerSkills;
+            PropagateFollowerAggressiveness = propagateFollowerAggressiveness;
         }
 
-        [JsonProperty("working")]
-        public bool Working { get; set; }
+        [JsonProperty("working")] public bool Working { get; set; }
 
-        [JsonProperty("follower_mode")]
-        public FollowerType FollowerMode { get; set; }
+        [JsonProperty("follower_mode")] public FollowerType FollowerMode { get; set; }
 
-        [JsonProperty("leader_name")]
-        public string LeaderName { get; set; }
+        [JsonProperty("leader_name")] public string LeaderName { get; set; }
 
-        [JsonProperty("use_movement_skill")]
-        public bool UseMovementSkill { get; set; }
+        [JsonProperty("use_movement_skill")] public bool UseMovementSkill { get; set; }
 
-        [JsonProperty("movement_skill_key")]
-        public Keys MovementSkillKey { get; set; }
+        [JsonProperty("movement_skill_key")] public Keys MovementSkillKey { get; set; }
+
+        [JsonProperty("last_change_timestamp")]
+        public long LastChangeTimestamp { get; set; }
+
+        [JsonProperty("propagate_follower_aggressiveness")]
+        public FollowerAggressiveness PropagateFollowerAggressiveness { get; set; }
+
+        [JsonProperty("follower_skills")] public List<FollowerSkill> FollowerSkills { get; set; }
     }
 
     public class NetworkHelper
     {
-
-        private FollowerSettings _followerSettings;
+        private readonly FollowerSettings _followerSettings;
 
         public NetworkHelper(FollowerSettings followerSettings)
         {
             _followerSettings = followerSettings;
         }
 
-        public void MakeGetNetworkRequest(string url, int timeoutSeconds, Action<string, float> logMessageFunc, Action<string> callbackFunc)
+        public void MakeGetNetworkRequest(string url, int timeoutSeconds, Action<string, float> logMessageFunc,
+            Action<string> callbackFunc)
         {
-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+            HttpWebRequest request = (HttpWebRequest) WebRequest.Create(url);
             request.Method = "GET";
             request.Timeout = timeoutSeconds * 1000;
-            HttpWebResponse response = (HttpWebResponse)request.GetResponse();
+            HttpWebResponse response = (HttpWebResponse) request.GetResponse();
 
             if (response.StatusCode == HttpStatusCode.OK)
             {
@@ -61,9 +71,6 @@ namespace Follower
                 string reply = reader.ReadToEnd();
 
                 callbackFunc(reply);
-
-                //NetworkActivityObject networkActivityObject = JsonConvert.DeserializeObject<NetworkActivityObject>(reply);
-                //ProcessNetworkActivityResponse(networkActivityObject);
             }
             else
             {
@@ -79,7 +86,7 @@ namespace Follower
 
             void ListenerCallback(IAsyncResult res)
             {
-                HttpListener list = (HttpListener)res.AsyncState;
+                HttpListener list = (HttpListener) res.AsyncState;
 
                 HttpListenerContext context;
                 try
@@ -102,11 +109,14 @@ namespace Follower
                     FollowerType.Follower,
                     _followerSettings.NetworkActivityPropagateLeaderName.Value,
                     _followerSettings.NetworkActivityPropagateUseMovementSkill.Value,
-                    _followerSettings.NetworkActivityPropagateMovementSkillKey.Value
+                    _followerSettings.NetworkActivityPropagateMovementSkillKey.Value,
+                    GetFollowerSkills(),
+                    _followerSettings.PropagateFollowerAggressiveness
                 );
 
                 // Construct a response.
-                string responseString = JsonConvert.SerializeObject(networkActivityObject); ;
+                string responseString = JsonConvert.SerializeObject(networkActivityObject);
+                ;
                 byte[] buffer = System.Text.Encoding.UTF8.GetBytes(responseString);
                 // Get a response stream and write the response to it.
                 response.ContentLength64 = buffer.Length;
@@ -116,6 +126,39 @@ namespace Follower
                 output.Close();
             }
         }
-    }
 
+        private List<FollowerSkill> GetFollowerSkills()
+        {
+            return new List<FollowerSkill>()
+            {
+                new FollowerSkill(
+                    _followerSettings.SkillOne.Enable.Value,
+                    _followerSettings.SkillOne.SkillHotkey.Value,
+                    _followerSettings.SkillOne.UseAgainstMonsters.Value,
+                    Int32.Parse(_followerSettings.SkillOne.CooldownBetweenCasts.Value),
+                    _followerSettings.SkillOne.Priority.Value,
+                    _followerSettings.SkillOne.Position.Value,
+                    _followerSettings.SkillOne.Range.Value
+                ),
+                new FollowerSkill(
+                    _followerSettings.SkillTwo.Enable.Value,
+                    _followerSettings.SkillTwo.SkillHotkey.Value,
+                    _followerSettings.SkillTwo.UseAgainstMonsters.Value,
+                    Int32.Parse(_followerSettings.SkillTwo.CooldownBetweenCasts.Value),
+                    _followerSettings.SkillTwo.Priority.Value,
+                    _followerSettings.SkillTwo.Position.Value,
+                    _followerSettings.SkillTwo.Range.Value
+                ),
+                new FollowerSkill(
+                    _followerSettings.SkillThree.Enable.Value,
+                    _followerSettings.SkillThree.SkillHotkey.Value,
+                    _followerSettings.SkillThree.UseAgainstMonsters.Value,
+                    Int32.Parse(_followerSettings.SkillThree.CooldownBetweenCasts.Value),
+                    _followerSettings.SkillThree.Priority.Value,
+                    _followerSettings.SkillThree.Position.Value,
+                    _followerSettings.SkillThree.Range.Value
+                ),
+            };
+        }
+    }
 }
