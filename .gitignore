@@ -296,7 +296,6 @@ SharpDX.Desktop.dll
 PoeHUD.exe.config
 PoeFilterParser.dll
 Newtonsoft.Json.xml
-Newtonsoft.Json.dll
 netstandard.dll
 System.Net.NetworkInformation.dll
 System.Net.NameResolution.dll
