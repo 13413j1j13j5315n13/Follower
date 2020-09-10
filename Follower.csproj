@@ -86,6 +86,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="CustomItem.cs" />
+    <Compile Include="NetworkActivity.cs" />
     <Compile Include="Misc.cs" />
     <Compile Include="Mouse.cs" />
     <Compile Include="Follower.cs" />
