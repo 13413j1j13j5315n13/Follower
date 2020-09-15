@@ -12,96 +12,61 @@ namespace Follower
 {
     public class FollowerSettings : ISettings
     {
-        public FollowerSettings()
-        {
-            Enable = new ToggleNode(false);
-            FollowerActivateKey = Keys.F2;
-            FontHeight = new RangeNode<int>(20, 10, 70);
-            ExtraDelay = new RangeNode<int>(0, 0, 200);
-            MouseSpeed = new RangeNode<float>(1, 0, 30);
-            LeaderName = new TextNode("");
+        public TextNode LeaderName { get; set; } = new TextNode("");
 
-            UseMovementSkill = new ToggleNode(false);
-            MovementSkillKey = new HotkeyNode(Keys.Q);
-            MovementSkillCooldownMilliseconds = new RangeNode<int>(3500, 0, 10000);
+        public ToggleNode Enable { get; set; } = new ToggleNode(false);
+        //public RangeNode<int> FontHeight { get; set; }
+        public HotkeyNode FollowerActivateKey { get; set; } = Keys.F2;
+        public RangeNode<int> ExtraDelay { get; set; } = new RangeNode<int>(0, 0, 200);
+        public RangeNode<float> MouseSpeed { get; set; } = new RangeNode<float>(1, 0, 30);
 
-            EnableNetworkActivity = new ToggleNode(true);
-            ActivityColor = Color.Red; // Leading, Following, No action
-            FollowerTextColor = Color.Green;
-            LeaderTextColor = Color.Red;
-            FollowerModeToggleFollower = new ToggleNode(false);
-            FollowerModeToggleLeader = new ToggleNode(false);
-            NetworkActivityUrl = new TextNode("");
-            NetworkActivityServerPort = new RangeNode<int>(4412, 3000, 6000);
-            NetworkActivityPropagateLeaderName = new TextNode("");
-            NetworkActivityPropagateUseMovementSkill = new ToggleNode(false);
-            NetworkActivityPropagateMovementSkillKey = Keys.Q;
-            NetworkActivityPropagateWorking = new ToggleNode(false);
-            NetworkActivityActivateKey = Keys.F3;
-            NetworkActivityPropagateWorkingChangeKey = Keys.F4;
-            NetworkActivityPropagateAggressivenessModeChangeKey = Keys.F5;
+        [Menu("Use Movement Skill", 1)] public ToggleNode UseMovementSkill { get; set; } = new ToggleNode(false);
 
-            SkillOne = new SkillSettings(1);
-            SkillTwo = new SkillSettings(2);
-            SkillThree = new SkillSettings(3);
-
-            PropagateFollowerAggressiveness = FollowerAggressiveness.Disabled;
-        }
-
-        public TextNode LeaderName { get; set; }
-        public ToggleNode Enable { get; set; }
-        public RangeNode<int> FontHeight { get; set; }
-        public HotkeyNode FollowerActivateKey { get; set; }
-        public RangeNode<int> ExtraDelay { get; set; }
-        public RangeNode<float> MouseSpeed { get; set; }
-
-        [Menu("Use Movement Skill", 1)] public ToggleNode UseMovementSkill { get; set; }
-
-        [Menu("Movement Skill Key", 11, 1)] public HotkeyNode MovementSkillKey { get; set; }
+        [Menu("Movement Skill Key", 11, 1)] public HotkeyNode MovementSkillKey { get; set; } = new HotkeyNode(Keys.Q);
 
         [Menu("Movement Skill Cooldown", "In Milliseconds", 12, 1)]
-        public RangeNode<int> MovementSkillCooldownMilliseconds { get; set; }
+        public RangeNode<int> MovementSkillCooldownMilliseconds { get; set; } = new RangeNode<int>(3500, 0, 10000);
 
         [Menu("Enable Network Communication", 2)]
-        public ToggleNode EnableNetworkActivity { get; set; }
+        public ToggleNode EnableNetworkActivity { get; set; } = new ToggleNode(true);
 
-        public ColorNode ActivityColor { get; set; }
+        public ColorNode ActivityColor { get; set; } = Color.Red;
 
-        [Menu("Sets as Follower", 21, 2)] public ToggleNode FollowerModeToggleFollower { get; set; }
-        [Menu("Follower Text Color", 22, 2)] public ColorNode FollowerTextColor { get; set; }
+        [Menu("Sets as Follower", 21, 2)] public ToggleNode FollowerModeToggleFollower { get; set; } = new ToggleNode(false);
+        [Menu("Follower Text Color", 22, 2)] public ColorNode FollowerTextColor { get; set; } = Color.Green;
 
-        [Menu("Sets as Leader", 23, 2)] public ToggleNode FollowerModeToggleLeader { get; set; }
-        [Menu("Leader Text Color", 24, 2)] public ColorNode LeaderTextColor { get; set; }
+        [Menu("Sets as Leader", 23, 2)] public ToggleNode FollowerModeToggleLeader { get; set; } = new ToggleNode(false);
+        [Menu("Leader Text Color", 24, 2)] public ColorNode LeaderTextColor { get; set; } = Color.Red;
 
         [Menu("Activate Network Activity", 25, 2)]
-        public HotkeyNode NetworkActivityActivateKey { get; set; }
+        public HotkeyNode NetworkActivityActivateKey { get; set; } = Keys.F3;
 
-        [Menu("URL", 26, 2)] public TextNode NetworkActivityUrl { get; set; }
-        [Menu("Server Port", 27, 2)] public RangeNode<int> NetworkActivityServerPort { get; set; }
+        [Menu("URL", 26, 2)] public TextNode NetworkActivityUrl { get; set; } = new TextNode("");
+        [Menu("Server Port", 27, 2)] public RangeNode<int> NetworkActivityServerPort { get; set; } = new RangeNode<int>(4412, 3000, 6000);
 
         [Menu("Leader Name to propagate", 28, 2)]
-        public TextNode NetworkActivityPropagateLeaderName { get; set; }
+        public TextNode NetworkActivityPropagateLeaderName { get; set; } = new TextNode("");
 
         [Menu("Propagate usage of the movement skill", 29, 2)]
-        public ToggleNode NetworkActivityPropagateUseMovementSkill { get; set; }
+        public ToggleNode NetworkActivityPropagateUseMovementSkill { get; set; } = new ToggleNode(false);
 
         [Menu("Propagated movement skill key", 210, 2)]
-        public HotkeyNode NetworkActivityPropagateMovementSkillKey { get; set; }
+        public HotkeyNode NetworkActivityPropagateMovementSkillKey { get; set; } = Keys.Q;
 
         [Menu("Propagated working of followers", 211, 2)]
-        public ToggleNode NetworkActivityPropagateWorking { get; set; }
+        public ToggleNode NetworkActivityPropagateWorking { get; set; } = new ToggleNode(false);
 
         [Menu("Hotkey to stop/start followers", 212, 2)]
-        public HotkeyNode NetworkActivityPropagateWorkingChangeKey { get; set; }
+        public HotkeyNode NetworkActivityPropagateWorkingChangeKey { get; set; } = Keys.F4;
 
         [Menu("Change aggressiveness of followers", 213, 2)]
-        public HotkeyNode NetworkActivityPropagateAggressivenessModeChangeKey { get; set; }
+        public HotkeyNode NetworkActivityPropagateAggressivenessModeChangeKey { get; set; } = Keys.F5;
 
-        [Menu("Slave Skill 1", 3)] public SkillSettings SkillOne { get; set; }
-        [Menu("Slave Skill 2", 4)] public SkillSettings SkillTwo { get; set; }
-        [Menu("Slave Skill 3", 5)] public SkillSettings SkillThree { get; set; }
+        [Menu("Slave Skill 1", 3)] public SkillSettings SkillOne { get; set; } = new SkillSettings(1);
+        [Menu("Slave Skill 2", 4)] public SkillSettings SkillTwo { get; set; } = new SkillSettings(2);
+        [Menu("Slave Skill 3", 5)] public SkillSettings SkillThree { get; set; } = new SkillSettings(3);
 
-        public FollowerAggressiveness PropagateFollowerAggressiveness { get; set; }
+        public FollowerAggressiveness PropagateFollowerAggressiveness { get; set; } = FollowerAggressiveness.Disabled;
     }
 
     public class SkillSettings : ISettings
