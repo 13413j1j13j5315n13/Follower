@@ -12,10 +12,9 @@ namespace Follower
 {
     public class FollowerSettings : ISettings
     {
-        public TextNode LeaderName { get; set; } = new TextNode("");
-
         public ToggleNode Enable { get; set; } = new ToggleNode(false);
-        //public RangeNode<int> FontHeight { get; set; }
+
+        public TextNode LeaderName { get; set; } = new TextNode("");
         public HotkeyNode FollowerActivateKey { get; set; } = Keys.F2;
         public RangeNode<int> ExtraDelay { get; set; } = new RangeNode<int>(0, 0, 200);
         public RangeNode<float> MouseSpeed { get; set; } = new RangeNode<float>(1, 0, 30);
@@ -62,11 +61,17 @@ namespace Follower
         [Menu("Change aggressiveness of followers", 213, 2)]
         public HotkeyNode NetworkActivityPropagateAggressivenessModeChangeKey { get; set; } = Keys.F5;
 
+        [Menu("Enter instance command", 214, 2)]
+        public HotkeyNode NetworkActivityPropagateEnterInstanceKey { get; set; } = Keys.F6;
+
         [Menu("Slave Skill 1", 3)] public SkillSettings SkillOne { get; set; } = new SkillSettings(1);
         [Menu("Slave Skill 2", 4)] public SkillSettings SkillTwo { get; set; } = new SkillSettings(2);
         [Menu("Slave Skill 3", 5)] public SkillSettings SkillThree { get; set; } = new SkillSettings(3);
 
         public FollowerAggressiveness PropagateFollowerAggressiveness { get; set; } = FollowerAggressiveness.Disabled;
+
+        public long PropagateEnterInstance =
+            ((DateTimeOffset)new DateTime(1, 1, 1, 0, 0, 0, DateTimeKind.Utc)).ToUnixTimeMilliseconds();
     }
 
     public class SkillSettings : ISettings

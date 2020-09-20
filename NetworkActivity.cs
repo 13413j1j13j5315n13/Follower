@@ -16,7 +16,7 @@ namespace Follower
     {
         public NetworkActivityObject(bool working, FollowerType followerType, string leaderName, bool useMovementSkill,
             Keys movementSkillKey, List<FollowerSkill> followerSkills,
-            FollowerAggressiveness propagateFollowerAggressiveness)
+            FollowerAggressiveness propagateFollowerAggressiveness, long propagateEnterInstance)
         {
             Working = working;
             FollowerMode = followerType;
@@ -26,6 +26,7 @@ namespace Follower
             LastChangeTimestamp = ((DateTimeOffset) DateTime.UtcNow).ToUnixTimeMilliseconds();
             FollowerSkills = followerSkills;
             PropagateFollowerAggressiveness = propagateFollowerAggressiveness;
+            PropagateEnterInstance = propagateEnterInstance;
         }
 
         [JsonProperty("working")] public bool Working { get; set; }
@@ -43,6 +44,10 @@ namespace Follower
 
         [JsonProperty("propagate_follower_aggressiveness")]
         public FollowerAggressiveness PropagateFollowerAggressiveness { get; set; }
+
+
+        [JsonProperty("enter_instance")]
+        public long PropagateEnterInstance { get; set; }
 
         [JsonProperty("follower_skills")] public List<FollowerSkill> FollowerSkills { get; set; }
     }
@@ -111,7 +116,8 @@ namespace Follower
                     _followerSettings.NetworkActivityPropagateUseMovementSkill.Value,
                     _followerSettings.NetworkActivityPropagateMovementSkillKey.Value,
                     GetFollowerSkills(),
-                    _followerSettings.PropagateFollowerAggressiveness
+                    _followerSettings.PropagateFollowerAggressiveness,
+                    _followerSettings.PropagateEnterInstance
                 );
 
                 // Construct a response.

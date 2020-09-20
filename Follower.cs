@@ -53,16 +53,20 @@ namespace Follower
         private NetworkHelper _networkHelper;
 
         private FollowerType _currentFollowerMode = FollowerType.Disabled;
-        private FollowerAggressiveness _followerAggressivenessMode = FollowerAggressiveness.Disabled;
+        private FollowerAggressiveness _followerAggressivenessMode = FollowerAggressiveness.Passive;
         private WaitTime Wait3ms => new WaitTime(3);
 
         private WaitTime Wait10ms => new WaitTime(10);
         //private WaitTime Wait3seconds => new WaitTime(3 * 1000);
 
         private DateTime _currentTime = DateTime.UtcNow;
-        private DateTime _lastTimeMovementSkillUsed;
-        private DateTime _lastTimeNetworkActivityPropagateWorkingChanged;
-        private DateTime _lastTimeAggressivenessModePropagated;
+        private DateTime _lastTimeMovementSkillUsed = DateTime.UtcNow;
+        private DateTime _lastTimeNetworkActivityPropagateWorkingChanged = DateTime.UtcNow;
+        private DateTime _lastTimeAggressivenessModePropagated = DateTime.UtcNow;
+
+        private DateTime _lastTimeEnterInstancePropagated = new DateTime(1, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+        private long _enterInstanceValue;
+        private long _lastTimeEnterInstanceUsed;
 
         public override bool Initialise()
         {
@@ -72,9 +76,11 @@ namespace Follower
 
             _windowRectangle = GameController.Window.GetWindowRectangleReal();
             _windowSize = new Size2F(_windowRectangle.Width / 2560, _windowRectangle.Height / 1600);
-            _lastTimeMovementSkillUsed = DateTime.UtcNow;
-            _lastTimeNetworkActivityPropagateWorkingChanged = DateTime.UtcNow;
-            _lastTimeAggressivenessModePropagated = DateTime.UtcNow;
+            //_lastTimeMovementSkillUsed = DateTime.UtcNow;
+            //_lastTimeNetworkActivityPropagateWorkingChanged = DateTime.UtcNow;
+            //_lastTimeAggressivenessModePropagated = DateTime.UtcNow;
+            _lastTimeEnterInstanceUsed = ((DateTimeOffset)_lastTimeEnterInstancePropagated).ToUnixTimeMilliseconds();
+            _enterInstanceValue = ((DateTimeOffset)_lastTimeEnterInstancePropagated).ToUnixTimeMilliseconds();
 
             GameController.LeftPanel.WantUse(() => true);
 
@@ -241,8 +247,10 @@ namespace Follower
                 {
                     _httpListener.Stop();
                     yield return DoFollowerNetworkActivityWork();
-                    yield return new WaitTime(3 * 1000);
-                    ; // Always wait before making a new request
+
+                    // Always wait before making a new request
+                    yield return new WaitTime(1 * 1000);
+                    
                 }
                 else if (_currentFollowerMode == FollowerType.Leader)
                 {
@@ -272,6 +280,7 @@ namespace Follower
                 {
                     //LogMessage(" :::::::: Before GetContext", 1);
 
+                    Settings.PropagateEnterInstance = ((DateTimeOffset) _lastTimeEnterInstancePropagated).ToUnixTimeMilliseconds();
                     _networkHelper.MakeAsyncListen(_httpListener);
                 }
 
@@ -288,7 +297,13 @@ namespace Follower
                 {
                     if (_followerAggressivenessMode == FollowerAggressiveness.Passive)
                     {
-                        yield return DoFollow();
+                        bool useEnterInstance = _lastTimeEnterInstanceUsed != _enterInstanceValue;
+                        if (useEnterInstance)
+                        {
+                            _lastTimeEnterInstanceUsed = _enterInstanceValue;
+                            yield return EnterNearestInstance();
+                        }
+                        else yield return DoFollow();
                     }
                     else if (_followerAggressivenessMode == FollowerAggressiveness.Aggressive)
                     {
@@ -331,6 +346,11 @@ namespace Follower
             if (Input.GetKeyState(Settings.NetworkActivityPropagateAggressivenessModeChangeKey.Value))
             {
                 ChangeAggressivenessModeToPropagate();
+            }
+
+            if (Input.GetKeyState(Settings.NetworkActivityPropagateEnterInstanceKey.Value))
+            {
+                EnterInstancePropagate();
             }
 
             if (Input.GetKeyState(Settings.NetworkActivityActivateKey.Value))
@@ -422,6 +442,7 @@ namespace Follower
             _currentFollowerMode = activityObj.FollowerMode;
             _followerAggressivenessMode = activityObj.PropagateFollowerAggressiveness;
             _followerShouldWork = activityObj.Working;
+            _enterInstanceValue = activityObj.PropagateEnterInstance;
 
             if (activityObj.Working) _followerCoroutine.Resume();
             else _followerCoroutine.Pause();
@@ -449,6 +470,27 @@ namespace Follower
             }
 
             return;
+        }
+
+        private IEnumerator EnterNearestInstance()
+        {
+            Entity player = GameController.Player;
+            List<Entity> entities = GameController.EntityListWrapper
+                .ValidEntitiesByType[EntityType.AreaTransition]
+                .OrderBy(o => FollowerHelpers.EntityDistance(o, player))
+                .ToList();
+
+            if (entities.Any())
+            {
+                Entity entrance = entities.First();
+
+                yield return HoverTo(entrance);
+                yield return new WaitTime(100);
+                yield return Mouse.LeftClick();
+                yield return new WaitTime(2000);
+            }
+
+            yield break;
         }
 
         private IEnumerator DoAttack()
@@ -557,10 +599,12 @@ namespace Follower
             }
             else
             {
-                yield return Mouse.LeftClick();
+                yield return Input.KeyPress(Keys.T);
+                //yield return Mouse.LeftClick();
             }
 
-            yield return CanUseMovementSkill() ? Input.KeyPress(Settings.MovementSkillKey) : Mouse.LeftClick();
+            //yield return CanUseMovementSkill() ? Input.KeyPress(Settings.MovementSkillKey) : Mouse.LeftClick();
+            yield return CanUseMovementSkill() ? Input.KeyPress(Settings.MovementSkillKey) : Input.KeyPress(Keys.T);
         }
 
         private IEnumerator HoverTo(Entity entity)
@@ -575,7 +619,10 @@ namespace Follower
             RectangleF aaa = new RectangleF(result.X - scaledWidth / 2f, result.Y - scaledHeight / 2f, scaledWidth,
                 scaledHeight);
 
-            Vector2 finalPos = new Vector2(aaa.X, aaa.Y);
+            var randomXOffset = new Random().Next(-10, 10);
+            var randomYOffset = new Random().Next(-10, 10);
+
+            Vector2 finalPos = new Vector2(aaa.X + randomXOffset, aaa.Y + randomYOffset);
 
             //LogMessage("Moving and clicking mouse.", 5, Color.Red);
 
@@ -621,6 +668,17 @@ namespace Follower
                     Settings.PropagateFollowerAggressiveness = FollowerAggressiveness.Passive;
                 else
                     Settings.PropagateFollowerAggressiveness = FollowerAggressiveness.Passive;
+            }
+        }
+
+        private void EnterInstancePropagate()
+        {
+            int cooldown = 3000;
+
+            long deltaMilliseconds = GetDeltaInMilliseconds(_lastTimeEnterInstancePropagated);
+            if (deltaMilliseconds > cooldown)
+            {
+                _lastTimeEnterInstancePropagated = DateTime.UtcNow;
             }
         }
 
